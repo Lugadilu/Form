@@ -6,6 +6,7 @@ using FormAPI.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.OpenApi.Models;
+using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -60,6 +61,9 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.Preserve;
         options.JsonSerializerOptions.WriteIndented = true;
     });
+
+// Configure Npgsql to use Newtonsoft.Json for JSON serialization
+NpgsqlConnection.GlobalTypeMapper.UseJsonNet();
 
 var app = builder.Build();
 

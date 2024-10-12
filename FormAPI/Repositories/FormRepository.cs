@@ -1,6 +1,7 @@
 ﻿using FormAPI.Context;
 using FormAPI.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -11,10 +12,13 @@ namespace FormAPI.Repositories
     public class FormRepository : IFormRepository
     {
         private readonly ApplicationDbContext _context;
+        private readonly ILogger<FormRepository> _logger;
 
-        public FormRepository(ApplicationDbContext context)
+
+        public FormRepository(ApplicationDbContext context, ILogger<FormRepository> logger)
         {
             _context = context;
+            _logger = logger;
         }
 
         public async Task<IEnumerable<Form>> GetAllFormsAsync()
@@ -30,21 +34,52 @@ namespace FormAPI.Repositories
             return await _context.forms
                 .Include(f => f.Pages)
                 .ThenInclude(p => p.FormFields)
+                 .AsNoTracking() // Ensure no changes are tracked yet, this is a read-only operation
                 .FirstOrDefaultAsync(f => f.Id == formId);
         }
 
+        
         public async Task AddFormAsync(Form form)
         {
-            _context.forms.Add(form);
+            form.Id = Guid.Empty;
+            //_context.forms.Add(form);
+            _context.Entry(form).State = EntityState.Added;
+            _logger.LogInformation("Adding new form with Name: {FormName} and Description: {Description}.", form.Name, form.Description);
+
+
             await _context.SaveChangesAsync();
+            _logger.LogInformation("Form with Name: {FormName} added successfully with ID: {FormId}.", form.Name, form.Id);
+
+
+            // Reload the form to ensure RowVersion is populated from the database
+            await _context.Entry(form).ReloadAsync();
         }
 
+        /*
+        public async Task UpdateFormAsync(Form form)
+        {
+            // Attach the form entity and set its state to Modified
+            //_context.Entry(form).OriginalValues["RowVersion"] = form.RowVersion; // Use RowVersion for concurrency check
+            _context.forms.Update(form);
+
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                _logger.LogError("Concurrency conflict occurred during update operation.", ex);
+                throw;
+            }
+        }
+        */
+        
         public async Task UpdateFormAsync(Form form)
         {
             _context.Entry(form).State = EntityState.Modified;
             await _context.SaveChangesAsync();
         }
-
+        
         public async Task DeleteFormAsync(Form form)
         {
             _context.forms.Remove(form);
@@ -105,6 +140,10 @@ namespace FormAPI.Repositories
                 .Include(f => f.Pages)
                     .ThenInclude(p => p.FormFields)
                 .FirstOrDefaultAsync(f => f.Id == formId);
+        }
+        public async Task SaveChangesAsync()
+        {
+            await _context.SaveChangesAsync();
         }
     }
 }

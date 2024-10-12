@@ -1,31 +1,26 @@
-﻿using FormAPI.Models;
+﻿
+using Microsoft.AspNetCore.Mvc.RazorPages;
+using Newtonsoft.Json;
 using System.ComponentModel.DataAnnotations;
-using System.Text.Json.Serialization; // For System.Text.Json
 namespace FormAPI.DTOs
 {
     public class FormDto
     {
-        // [JsonIgnore] 
-        
+
+        //public Guid Id { get; set; }
         public Guid Id { get; set; }
 
-        [Required(ErrorMessage = "The Name field is required.")]
-        [StringLength(100, ErrorMessage = "The Name field must be a maximum of 100 characters.")]
-        public string Name { get; set; }
+        [Required(ErrorMessage = "Form Name is required.")]
+        [StringLength(50, ErrorMessage = "Name must not exceed 50 characters.")]
+        public string  Name { get; set; }
 
-        [Required(ErrorMessage = "The Description field is required.")]
+        [StringLength(64, ErrorMessage = "Description must not exceed 64 characters.")]
         public string Description { get; set; }
-
-        //public ICollection<PageDto> Pages { get; set; } = new List<PageDto>();
-        [Required(ErrorMessage = "At least one page is required.")]
-        public List<PageDto> Pages { get; set; } = new List<PageDto>();
-
-        [JsonIgnore]
-        public ICollection<FormRecordDto> FormRecords { get; set; } = new List<FormRecordDto>();
-
-        [JsonPropertyName("type")]
-        public string Type => "form";
+        [Required(ErrorMessage = "Pages cannot be empty.")]
+        public ICollection<PageDto> Pages { get; set; }
 
         
+       
     }
 }
+

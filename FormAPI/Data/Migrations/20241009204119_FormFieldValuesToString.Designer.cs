@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using FormAPI.Context;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace FormAPI.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20241009204119_FormFieldValuesToString")]
+    partial class FormFieldValuesToString
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -46,7 +49,7 @@ namespace FormAPI.Data.Migrations
                     b.HasData(
                         new
                         {
-                            Id = new Guid("ec0468f6-8a0c-46ea-94b8-3f547074c42c"),
+                            Id = new Guid("b51fd1a2-6405-4359-99f3-138c4f2a7880"),
                             Description = "A form to collect customer feedback.",
                             Name = "JKUSA"
                         });
@@ -96,15 +99,15 @@ namespace FormAPI.Data.Migrations
                     b.HasData(
                         new
                         {
-                            InternalId = new Guid("93d20524-4b26-4de0-a509-2b104bcc4970"),
-                            Attributes = new Dictionary<string, object>(),
-                            FieldType = "FirstName",
+                            InternalId = new Guid("01512f04-f4bb-42b9-9d85-9cef1297fca9"),
+                            Attributes = new Dictionary<string, object> { ["maxLength"] = 100 },
+                            FieldType = "profileId",
                             Id = "profileFirstName",
                             Kind = "profile",
                             Name = "profileFirstName",
-                            PageId = new Guid("dd2b6d09-5dfb-4b7b-8803-0f2248e0bd2d"),
+                            PageId = new Guid("8d5625f0-1757-44d0-bd19-222627f57142"),
                             Required = true,
-                            Rules = new Dictionary<string, object>()
+                            Rules = new Dictionary<string, object> { ["minLength"] = 2, ["pattern"] = "^[a-zA-Z ]*$" }
                         });
                 });
 
@@ -133,10 +136,10 @@ namespace FormAPI.Data.Migrations
                     b.HasData(
                         new
                         {
-                            Id = new Guid("1cb4833d-41ee-4fe7-b077-6e1982c41202"),
-                            CreatedAt = new DateTime(2024, 10, 10, 10, 16, 54, 82, DateTimeKind.Utc).AddTicks(9915),
+                            Id = new Guid("3a58224d-1c2b-4c69-a50d-b80232629682"),
+                            CreatedAt = new DateTime(2024, 10, 9, 20, 41, 18, 662, DateTimeKind.Utc).AddTicks(6969),
                             FormFieldValues = "{\"profileFirstName\":\"Nelly\"}",
-                            FormId = new Guid("ec0468f6-8a0c-46ea-94b8-3f547074c42c")
+                            FormId = new Guid("b51fd1a2-6405-4359-99f3-138c4f2a7880")
                         });
                 });
 
@@ -158,8 +161,8 @@ namespace FormAPI.Data.Migrations
                     b.HasData(
                         new
                         {
-                            Id = new Guid("dd2b6d09-5dfb-4b7b-8803-0f2248e0bd2d"),
-                            FormId = new Guid("ec0468f6-8a0c-46ea-94b8-3f547074c42c")
+                            Id = new Guid("8d5625f0-1757-44d0-bd19-222627f57142"),
+                            FormId = new Guid("b51fd1a2-6405-4359-99f3-138c4f2a7880")
                         });
                 });
 

@@ -25,6 +25,7 @@ namespace FormAPI.Repositories
         Task DeleteFormRecordAsync(FormRecord formRecord);
         Task<IEnumerable<FormField>> GetFormFieldsByFormIdAsync(Guid formId);
         Task<Form> GetFormWithFieldsAsync(Guid formId);
+        Task SaveChangesAsync();
         /*
         Task<IEnumerable<Form>> GetAllFormsAsync();
         Task<Form> GetFormByIdAsync(Guid id);

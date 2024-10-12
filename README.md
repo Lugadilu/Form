@@ -206,22 +206,26 @@ Enter the required connection details such as Host, Port, Maintenance Database, 
 
 
 2. **Run Migrations**:
-   in the Nugget Package Console and this is the command Add-Migration InitialMigration 
+   in the Nugget Package Console and this is the command Add-Migration Initial or Add-Migration Initial -OutputDirectory Data
    update the database ie Update-Database
 
 3. **Seeding if youlike:
    - Seed the database with initial data.
-      in the ApplicationDbContext, add some seed data using this method modelBuilder.Entity<Form>().HasData({})
+      in the ApplicationDbContext, add some seed data using this method modelBuilder.Entity<Form>().HasData({}). You can separate seed data from the db context by adding the line SeedData.Initialize(modelBuilder); inside your OnModelCreation
 
 ### Running Migrations
 
 To apply database migrations, use the following command:
    modelBuilder.Entity<Form>().HasData(
 in the package Manager Console, run the following commands
-  Add-Migration SeedDatabase
+  Add-Migration Initial -OutputDirectory Data
   Update-Database
 
 
 
-### Run the project, test it on swagger or postman
-
+### Run the project, test it on postman or newman. make sure the url is in small leters and you are sending the root exactly as you set the endpoints. You can use swagger to show you the exact route paths 
+###Testing on a test script
+   1. In postman
+       Extract the file. Lanch piostman. On the top left corner, hit import, import the extracted folder. Set your project url as the baseurl ie baseUrl=https://localhost:7240 in the environments, and now run this folder against the base url
+   2. Newman
+      n your command line, navigate to your test folder, and run a command like newman run collection.postman.json --env-var baseUrl=https://localhost:7240 --insecure --verbose . The insecure  line prevents ssl certificate failure, and verbose it to run in debug mode to provide more details

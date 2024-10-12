@@ -1,4 +1,5 @@
-﻿using AutoMapper;
+﻿
+using AutoMapper;
 using FormAPI.DTOs;
 using FormAPI.Models;
 using FormAPI.Repositories;
@@ -10,7 +11,9 @@ using System.Threading.Tasks;
 
 namespace FormAPI.Controllers
 {
-    [Route("[controller]")]
+    //[Route("[controller]")]
+    [Route("forms")]
+    //[Route("FormRecords")]
     [ApiController]
     public class FormRecordsController : ControllerBase
     {
@@ -22,11 +25,78 @@ namespace FormAPI.Controllers
         {
             _formRepository = formRepository;
             _mapper = mapper;
-            
-       
         }
         [HttpGet("{formId}/records")]
-        public async Task<ActionResult> ListFormRecords(Guid formId)
+        public async Task<ActionResult> ListFormRecords(string formId)
+        {
+            try
+            {
+
+                if (!Guid.TryParse(formId, out Guid parsedFormId))
+                {
+                    return BadRequest(new { error = "Invalid formId format." });
+                }
+
+                // Retrieve all form records from the repository
+                var formRecords = await _formRepository.GetAllFormRecordsAsync();
+
+                // Filter records by the provided formId and construct the response
+                var records = formRecords
+                    .Where(r => r.FormId == parsedFormId)
+                    .Select(r =>
+                    {
+                        // Deserialize the form field values
+                        //var formFieldValues = JsonConvert.DeserializeObject<Dictionary<string, object>>(r.FormFieldValues);
+
+                        // Construct the response record
+                        return new
+                        {
+                            type = "formRecord",
+                            id = r.Id,
+                            formId = r.FormId,
+                            //formFieldValues,
+                            formFieldValues = r.FormFieldValues, // Use dictionary directly
+                            createdAt = r.CreatedAt
+                        };
+                    })
+                    .ToList();  // Explicitly convert to List to ensure 'records' is treated as an array
+
+                // Prepare the response with 'data' as a plain array (no additional properties like $id)
+                var response = new
+                {
+                    data = records,  // This is a plain array, not an object
+                    links = new { self = "/form/formRecords" }
+                };
+
+                // Return the response in JSON format
+                // return Ok(response);
+
+
+                // Return response using JsonConvert with default serializer settings
+                var serializedResponse = JsonConvert.SerializeObject(response, new JsonSerializerSettings
+                {
+                    ReferenceLoopHandling = ReferenceLoopHandling.Ignore, // Avoids self-referencing loops
+                    PreserveReferencesHandling = PreserveReferencesHandling.None, // Avoids $id attributes
+                    Formatting = Formatting.Indented
+                });
+
+                // Return the serialized response with correct content type
+                return Content(serializedResponse, "application/vnd.api+json");
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    error = "An unexpected error occurred while retrieving form records.",
+                    details = ex.Message
+                });
+            }
+        }
+
+
+        // GET: api/formRecords
+        [HttpGet("formRecords")]
+        public async Task<ActionResult> ListAllFormRecords()
         {
             try
             {
@@ -34,33 +104,27 @@ namespace FormAPI.Controllers
 
                 var response = new
                 {
-                    data = formRecords
-                        .Where(r => r.FormId == formId)
-                        .Select(r =>
+                    data = formRecords.Select(r =>
+                    {
+                        // Deserialize FormFieldValues into a dynamic object
+                        //var formFieldValues = JsonConvert.DeserializeObject<Dictionary<string, object>>(r.FormFieldValues);
+
+                        // Construct the response object
+                        var record = new
                         {
-                            // Deserialize FormFieldValues into a dynamic object
-                            var formFieldValues = JsonConvert.DeserializeObject<Dictionary<string, object>>(r.FormFieldValues);
+                            type = "formRecord",
+                            id = r.Id,
+                            formId = r.FormId,
+                            FormFieldValues = r.FormFieldValues
 
-                            // Construct the response object
-                            var record = new
-                            {
-                                type = "formRecord",
-                                id = r.Id,
-                                formId = r.FormId
-                            };
-
-                            // Merge the record with formFieldValues
-                            return new
-                            {
-                                data = record
-                                    .GetType()
-                                    .GetProperties()
-                                    .ToDictionary(prop => prop.Name, prop => prop.GetValue(record))
-                                    .Concat(formFieldValues)
-                                    .ToDictionary(kv => kv.Key, kv => kv.Value),
-                                links = new { self = "../dictionary" }
-                            };
-                        }),
+                        };
+                       
+                        return new
+                        {
+                            data = record,
+                            links = new { self = "../dictionary" }
+                        };
+                    }),
                     links = new { self = "/form/formRecords" }
                 };
 
@@ -77,32 +141,55 @@ namespace FormAPI.Controllers
         }
 
 
-
-        // GET: forms/{formId}/records/{recordId}
         [HttpGet("{formId}/records/{recordId}")]
-        public async Task<ActionResult> GetFormRecord(Guid formId, Guid recordId)
+        public async Task<ActionResult> GetFormRecordById(string formId, string recordId)
         {
             try
             {
-                var formRecord = await _formRepository.GetFormRecordByIdAsync(formId, recordId);
 
+                if (!Guid.TryParse(formId, out Guid parsedFormId))
+                {
+                    return BadRequest(new { error = "Invalid formId format." });
+                }
+
+                if (!Guid.TryParse(recordId, out Guid parsedRecordId))
+                {
+                    return BadRequest(new { error = "Invalid recordId format." });
+                }
+
+
+                // Retrieve the specific form record by formId and recordId from the repository
+                var formRecord = await _formRepository.GetFormRecordByIdAsync(parsedFormId, parsedRecordId);
+
+                // If no record is found, return 404
                 if (formRecord == null)
                 {
                     return NotFound(new { error = "Form record not found." });
                 }
 
+                // Construct the response object based on the retrieved record
                 var response = new
                 {
                     data = new
                     {
-                        formRecord.Id,
-                        formRecord.FormId,
-                        formRecord.FormFieldValues
+                        type = "formRecord",
+                        id = formRecord.Id,
+                        formId = formRecord.FormId,
+                        formFieldValues = formRecord.FormFieldValues,
+                        createdAt = formRecord.CreatedAt
                     },
-                    type = "formRecord"
+                    links = new { self = $"/forms/{formId}/records/{recordId}" }
                 };
 
-                return Content(JsonConvert.SerializeObject(response), "application/vnd.api+json");
+                // Serialize the response and return it with the correct Content-Type
+                var serializedResponse = JsonConvert.SerializeObject(response, new JsonSerializerSettings
+                {
+                    ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
+                    PreserveReferencesHandling = PreserveReferencesHandling.None,
+                    Formatting = Formatting.Indented
+                });
+
+                return Content(serializedResponse, "application/vnd.api+json");
             }
             catch (Exception ex)
             {
@@ -115,74 +202,73 @@ namespace FormAPI.Controllers
         }
 
 
-        
+
         [HttpPost("{formId}/records")]
-        public async Task<ActionResult> CreateFormRecord(Guid formId, [FromBody] Dictionary<string, string> formFieldValues)
+        public async Task<ActionResult> CreateFormRecord(string formId, [FromBody] Dictionary<string, object> formFieldValues)
         {
             try
             {
-                
+
+                if (!Guid.TryParse(formId, out Guid parsedFormId))
+                {
+                    return BadRequest(new { error = "Invalid formId format." });
+                }
+
+
+                // Ensure form field values are provided
                 if (formFieldValues == null || !formFieldValues.Any())
                 {
-                    return BadRequest(new
-                    {
-                        error = "Form field values are required."
-                    });
+                    return BadRequest(new { error = "Form field values are required." });
                 }
-                
-                // Retrieve the form definition using the repository
-                var form = await _formRepository.GetFormWithFieldsAsync(formId);
+
+                // Retrieve the form definition along with the fields by parsedFormId
+                var form = await _formRepository.GetFormWithFieldsAsync(parsedFormId);
 
                 if (form == null)
                 {
-                    return NotFound(new
-                    {
-                        error = "Form not found."
-                    });
+                    return NotFound(new { error = "Form not found." });
                 }
 
-                // Extract the allowed fields from the form definition
-                var allowedFields = form.Pages
-                    .SelectMany(p => p.FormFields)
-                    .Select(ff => ff.Name)
-                    .ToList();
+                // Convert formFieldValues to ensure all values are of primitive types (string, int, etc.)
+                var simplifiedFormFieldValues = SimplifyFormFieldValues(formFieldValues);
 
-                // Validate the provided fields against the allowed fields
-                var invalidFields = formFieldValues.Keys.Except(allowedFields).ToList();
-                if (invalidFields.Any())
-                {
-                    return BadRequest(new
-                    {
-                        error = "Invalid fields provided.",
-                        invalidFields
-                    });
-                }
 
-                // Create a new FormRecord entity using AutoMapper
+                //Convert the formFieldValues to a JSON string to store in the database
+                var serializedFormFieldValues = JsonConvert.SerializeObject(simplifiedFormFieldValues);
+
+                // Create a new FormRecord entity
                 var formRecord = new FormRecord
                 {
                     Id = Guid.NewGuid(),
-                    FormId = formId,
-                    FormFieldValues = JsonConvert.SerializeObject(formFieldValues),
+                    FormId = parsedFormId,
+                    FormFieldValues = serializedFormFieldValues,  // store as JSON string
+                    //FormFieldValues = formFieldValues, // Assign directly since it is a dictionary
                     CreatedAt = DateTime.UtcNow
+                    // createdAt = formRecord.CreatedAt
                 };
 
-                // Use the repository to add the form record
+                // Save the form record to the database
                 await _formRepository.AddFormRecordAsync(formRecord);
+               
 
-                // Return the response
                 var response = new
                 {
                     data = new
                     {
                         type = "formRecord",
                         id = formRecord.Id,
-                        formId = formRecord.FormId,
-                        formFieldValues = formFieldValues,
+                        //formId = formRecord.FormId,
+                        // Use the original field values submitted, formatted as JSON string
+                        //formFieldValues = formattedFormFieldValues,
+                        formFieldValues = formRecord.FormFieldValues,
+                        // formFieldValues = simplifiedFormFieldValues,
                         createdAt = formRecord.CreatedAt
                     }
                 };
 
+
+
+                // Return success response with 201 status
                 return StatusCode(201, response);
             }
             catch (Exception ex)
@@ -194,10 +280,97 @@ namespace FormAPI.Controllers
                 });
             }
         }
-        
+
+
+        [HttpPatch("{formId}/records/{recordId}")]
+        public async Task<ActionResult> UpdateFormRecord(string formId, string recordId, [FromBody] Dictionary<string, object> updatedFields)
+        {
+            try
+            {
+                // Validate the formId and recordId formats
+                if (!Guid.TryParse(formId, out Guid parsedFormId))
+                {
+                    return BadRequest(new { error = "Invalid formId format." });
+                }
+
+                if (!Guid.TryParse(recordId, out Guid parsedRecordId))
+                {
+                    return BadRequest(new { error = "Invalid recordId format." });
+                }
+
+                // Ensure the updated fields are provided
+                if (updatedFields == null || !updatedFields.Any())
+                {
+                    return BadRequest(new { error = "Updated fields are required." });
+                }
+
+                // Retrieve the form record by formId and recordId
+                var formRecord = await _formRepository.GetFormRecordByIdAsync(parsedFormId, parsedRecordId);
+
+                // If the form record is not found, return 404
+                if (formRecord == null)
+                {
+                    return NotFound(new { error = "Form record not found." });
+                }
+
+                // Deserialize existing form field values into a dictionary
+                var existingFormFieldValues = JsonConvert.DeserializeObject<Dictionary<string, object>>(formRecord.FormFieldValues);
+
+                // Update only the fields provided in the request body
+                foreach (var field in updatedFields)
+                {
+                    if (existingFormFieldValues.ContainsKey(field.Key))
+                    {
+                        // Update existing field value
+                        existingFormFieldValues[field.Key] = field.Value;
+                    }
+                    else
+                    {
+                        // Add new field value
+                        existingFormFieldValues.Add(field.Key, field.Value);
+                    }
+                }
+
+                // Convert the updated field values back to JSON string
+                formRecord.FormFieldValues = JsonConvert.SerializeObject(existingFormFieldValues);
+
+                // Update the record's timestamp
+               // formRecord.UpdatedAt = DateTime.UtcNow;
+
+                // Save changes to the repository
+                await _formRepository.UpdateFormRecordAsync(formRecord);
+
+                // Create response object with the updated record information
+                var response = new
+                {
+                    data = new
+                    {
+                        type = "formRecord",
+                        id = formRecord.Id,
+                        formId = formRecord.FormId,
+                        formFieldValues = formRecord.FormFieldValues, // Send updated field values
+                       // updatedAt = formRecord.UpdatedAt
+                    },
+                    links = new { self = $"/forms/{formId}/records/{recordId}" }
+                };
+
+                // Return the updated record with 200 status
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    error = "An unexpected error occurred while updating the form record.",
+                    details = ex.Message
+                });
+            }
+        }
+
 
         // DELETE: forms/{formId}/records/{recordId}
-        [HttpDelete("{formId}/records/{recordId}")]
+         [HttpDelete("{formId}/records/{recordId}")]
+        //[HttpDelete("urn:uuid:{formId}/records")]
         public async Task<ActionResult> DeleteFormRecord(Guid formId, Guid recordId)
         {
             try
@@ -222,6 +395,7 @@ namespace FormAPI.Controllers
                 });
             }
         }
+        
 
         [HttpPut("FormRecords/{formId}/records/{recordId}")]
         //[HttpPut("{formId}/records/{recordId}")]
@@ -258,7 +432,7 @@ namespace FormAPI.Controllers
                 }
 
                 // Update the form record's field values
-                formRecord.FormFieldValues = JsonConvert.SerializeObject(formFieldValues);
+               // formRecord.FormFieldValues = JsonConvert.SerializeObject(formFieldValues);
 
                 // Save the updated form record using the repository
                 await _formRepository.UpdateFormRecordAsync(formRecord);
@@ -282,1289 +456,55 @@ namespace FormAPI.Controllers
                 return StatusCode(500, new { error = "An unexpected error occurred while updating the form record.", details = ex.Message });
             }
         }
+        private Dictionary<string, object> SimplifyFormFieldValues(Dictionary<string, object> originalValues)
+        {
+            var simplifiedValues = new Dictionary<string, object>();
 
+            foreach (var keyValuePair in originalValues)
+            {
+                simplifiedValues[keyValuePair.Key] = GetPrimitiveValue(keyValuePair.Value);
+            }
+
+            return simplifiedValues;
+        }
+
+        private object GetPrimitiveValue(object value)
+        {
+            // Check if the value is already a primitive type
+            if (value is string || value is int || value is bool || value is double || value is decimal)
+            {
+                return value; // Return as-is
+            }
+
+            // Check if the value is a JsonElement or JToken and get the raw value if necessary
+            if (value is Newtonsoft.Json.Linq.JToken jToken)
+            {
+                return jToken.ToObject<object>(); // Convert JToken to its primitive equivalent
+            }
+
+            // Add checks for other types as necessary (e.g., JsonElement for System.Text.Json)
+            if (value is System.Text.Json.JsonElement jsonElement)
+            {
+                switch (jsonElement.ValueKind)
+                {
+                    case System.Text.Json.JsonValueKind.String:
+                        return jsonElement.GetString();
+                    case System.Text.Json.JsonValueKind.Number:
+                        return jsonElement.GetDouble();
+                    case System.Text.Json.JsonValueKind.True:
+                        return true;
+                    case System.Text.Json.JsonValueKind.False:
+                        return false;
+                    case System.Text.Json.JsonValueKind.Null:
+                        return null;
+                    default:
+                        return jsonElement.ToString(); // For other types, serialize as string
+                }
+            }
+
+            // Fallback: if we can't simplify, return the string representation of the value
+            return value?.ToString() ?? string.Empty;
+        }
        
     }
 }
-
-
-
-
-
-
-
-/*
-using FormAPI.Context;
-using FormAPI.DTOs;
-using FormAPI.Models;
-using AutoMapper;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using Newtonsoft.Json;
-using System;
-using System.Linq;
-using System.Threading.Tasks;
-
-namespace FormAPI.Controllers
-{
-    [Route("forms/{formId}/records")]
-    [ApiController]
-    public class FormRecordsController : ControllerBase
-    {
-        private readonly ApplicationDbContext _context;
-        private readonly IMapper _mapper;
-
-        public FormRecordsController(ApplicationDbContext context, IMapper mapper)
-        {
-            _context = context;
-            _mapper = mapper;
-        }
-
-
-        // GET: formrecords
-        [HttpGet("/formrecords")]
-        public async Task<ActionResult> GetAllFormRecords()
-        {
-            try
-            {
-                var formRecords = await _context.formrecords.ToListAsync();
-
-                var formRecordDtos = formRecords.Select(fr => _mapper.Map<FormRecordDto>(fr)).ToList();
-
-                var response = new
-                {
-                    data = formRecordDtos.Select(fr => new
-                    {
-                        type = "formRecord",
-                        id = fr.Id,
-                        formId = fr.FormId,
-                        formFieldValues = fr.FormFieldValues,
-                        createdAt = fr.CreatedAt
-                    })
-                };
-
-                return Content(JsonConvert.SerializeObject(response), "application/vnd.api+json");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error fetching form records: {ex.Message}");
-                return StatusCode(StatusCodes.Status500InternalServerError, new { errors = new[] { new { status = "500", title = "Internal Server Error", detail = "Unexpected error occurred." } } });
-            }
-        }
-
-
-
-        // GET: forms/{formId}/records
-        [HttpGet]
-        //[HttpGet("{formId}/records")]
-        public async Task<ActionResult> GetFormRecords(Guid formId)
-        {
-            try
-            {
-                var formRecords = await _context.formrecords
-                    .Where(fr => fr.FormId == formId)
-                    .ToListAsync();
-
-                var formRecordDtos = formRecords.Select(fr => _mapper.Map<FormRecordDto>(fr)).ToList();
-
-                var response = new
-                {
-                    data = formRecordDtos.Select(fr => new
-                    {
-                        type = "formRecord",
-                        id = fr.Id,
-                        formId = fr.FormId,
-
-                        formFieldValues = fr.FormFieldValues,
-                        createdAt = fr.CreatedAt
-                    })
-                };
-
-                return Content(JsonConvert.SerializeObject(response), "application/vnd.api+json");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error fetching form records: {ex.Message}");
-                return StatusCode(StatusCodes.Status500InternalServerError, new { errors = new[] { new { status = "500", title = "Internal Server Error", detail = "Unexpected error occurred." } } });
-            }
-        }
-
-
-
-        // POST: forms/{formId}/records
-        [HttpPost]
-        public async Task<ActionResult> CreateFormRecord(Guid formId, [FromBody] Dictionary<string, string> formFieldValues)
-        {
-            try
-            {
-                if (formFieldValues == null || !formFieldValues.Any())
-                {
-                    return BadRequest(new
-                    {
-                        error = "Form field values are required."
-                    });
-                }
-
-                // Retrieve the form definition
-                var form = await _context.forms
-                    .Include(f => f.Pages)
-                        .ThenInclude(p => p.FormFields)
-                    .FirstOrDefaultAsync(f => f.Id == formId);
-
-                if (form == null)
-                {
-                    return NotFound(new
-                    {
-                        error = "Form not found."
-                    });
-                }
-
-                // Extract the allowed fields from the form definition
-                var allowedFields = form.Pages
-                    .SelectMany(p => p.FormFields)
-                    .Select(ff => ff.Name)
-                    .ToList();
-
-                // Validate the provided fields against the allowed fields
-                var invalidFields = formFieldValues.Keys.Except(allowedFields).ToList();
-                if (invalidFields.Any())
-                {
-                    return BadRequest(new
-                    {
-                        error = "Invalid fields provided.",
-                        invalidFields
-                    });
-                }
-
-                // Create a new FormRecord entity
-                var formRecord = new FormRecord
-                {
-                    Id = Guid.NewGuid(),
-                    FormId = formId,
-                    FormFieldValues = JsonConvert.SerializeObject(formFieldValues),
-                    CreatedAt = DateTime.UtcNow
-                };
-
-                // Add the form record to the context
-                _context.formrecords.Add(formRecord);
-                await _context.SaveChangesAsync();
-
-                // Return the response
-                var response = new
-                {
-                    data = new
-                    {
-                        type = "formRecord",
-                        id = formRecord.Id,
-                        formId = formRecord.FormId,
-                        formFieldValues = formFieldValues,
-                        createdAt = formRecord.CreatedAt
-                    }
-                };
-
-                return StatusCode(201, response);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new
-                {
-                    error = "An unexpected error occurred while creating the form record.",
-                    details = ex.Message
-                });
-            }
-        }
-
-
-        
-
-        // GET: forms/{formId}/records/{recordId}
-        [HttpGet("{recordId}")]
-        public async Task<ActionResult> GetFormRecordById(Guid formId, Guid recordId)
-        {
-            try
-            {
-                var formRecord = await _context.formrecords
-                    .FirstOrDefaultAsync(fr => fr.FormId == formId && fr.Id == recordId);
-
-                if (formRecord == null)
-                {
-                    return NotFound(new { errors = new[] { new { status = "404", title = "Not Found", detail = "Form record not found." } } });
-                }
-
-                var formRecordDto = _mapper.Map<FormRecordDto>(formRecord);
-
-                var response = new
-                {
-                    type = "formRecord",
-                    id = formRecordDto.Id,
-                    formId = formRecordDto.FormId,
-                    formFieldValues = formRecordDto.FormFieldValues,
-                    createdAt = formRecordDto.CreatedAt
-                };
-
-                return Content(JsonConvert.SerializeObject(response), "application/vnd.api+json");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error fetching form record: {ex.Message}");
-                return StatusCode(StatusCodes.Status500InternalServerError, new { errors = new[] { new { status = "500", title = "Internal Server Error", detail = "Unexpected error occurred." } } });
-            }
-        }
-
-        // [HttpPut("{formId}/records/{recordId}")]
-        [HttpPut("{recordId}")]
-        public async Task<ActionResult> UpdateFormRecord(Guid formId, Guid recordId, [FromBody] FormRecordDto formRecordDto)
-        {
-            try
-            {
-                var existingFormRecord = await _context.formrecords
-                    .FirstOrDefaultAsync(fr => fr.Id == recordId && fr.FormId == formId);
-
-                if (existingFormRecord == null)
-                {
-                    return NotFound(new { error = "Form record not found." });
-                }
-
-                // Update form record properties
-                existingFormRecord.FormFieldValues = formRecordDto.FormFieldValues;
-
-                await _context.SaveChangesAsync();
-
-                var response = new
-                {
-                    data = new
-                    {
-                        type = "formRecord",
-                        id = existingFormRecord.Id,
-                        attributes = new
-                        {
-                            existingFormRecord.FormFieldValues
-                        }
-                    }
-                };
-
-                return Ok(response);
-            }
-            catch (DbUpdateException ex)
-            {
-                return StatusCode(500, new
-                {
-                    error = "A database error occurred while updating the form record.",
-                    details = ex.Message
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new
-                {
-                    error = "An unexpected error occurred while updating the form record.",
-                    details = ex.Message
-                });
-            }
-        }
-
-
-
-
-        // DELETE: forms/{formId}/records/{recordId}
-        [HttpDelete("{recordId}")]
-        public async Task<ActionResult> DeleteFormRecord(Guid formId, Guid recordId)
-        {
-            try
-            {
-                var formRecord = await _context.formrecords
-                    .FirstOrDefaultAsync(fr => fr.FormId == formId && fr.Id == recordId);
-
-                if (formRecord == null)
-                {
-                    return NotFound(new { errors = new[] { new { status = "404", title = "Not Found", detail = "Form record not found." } } });
-                }
-
-                _context.formrecords.Remove(formRecord);
-                await _context.SaveChangesAsync();
-
-                return NoContent();
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error deleting form record: {ex.Message}");
-                return StatusCode(StatusCodes.Status500InternalServerError, new { errors = new[] { new { status = "500", title = "Internal Server Error", detail = "Unexpected error occurred." } } });
-            }
-        }
-    }
-}
-
-*/
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/*
-using FormAPI.Context;
-using FormAPI.Models;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using Newtonsoft.Json;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-
-namespace FormAPI.Controllers
-{
-    //[Route("api/forms/{formId}/records")]
-    [Route("forms/{formId}/records")]
-    [ApiController]
-    public class FormRecordsController : ControllerBase
-    {
-        private readonly ApplicationDbContext _context;
-
-        public FormRecordsController(ApplicationDbContext context)
-        {
-            _context = context;
-        }
-
-        // GET: api/forms/{formId}/records
-        [HttpGet]
-        public async Task<ActionResult> GetFormRecords(Guid formId)
-        {
-            try
-            {
-                var formRecords = await _context.formrecords
-                    .Where(fr => fr.FormId == formId)
-                    .ToListAsync();
-
-                var response = new
-                {
-                    data = formRecords.Select(fr => new
-                    {
-                        type = "formRecord",
-                        id = fr.Id,
-                        firstName = fr.FirstName,
-                        secondName = fr.SecondName,
-                        lastName = fr.LastName,
-                        birthdate = fr.Birthdate,
-                        gender = fr.Gender,
-                        languageCode = fr.LanguageCode,
-                        nationality = fr.Nationality,
-                        phoneNumber = fr.PhoneNumber,
-                        email = fr.Email,
-                        arrival = fr.Arrival,
-                        departure = fr.Departure,
-                        address = fr.Address,
-                        zip = fr.Zip,
-                        city = fr.City,
-                        country = fr.Country,
-                        rating = fr.Rating,
-                        formId = fr.FormId
-                    })
-                };
-
-                //return Ok(response);
-                return Content(JsonConvert.SerializeObject(response), "application/vnd.api+json");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error fetching form records: {ex.Message}");
-                return StatusCode(StatusCodes.Status500InternalServerError, new { errors = new[] { new { status = "500", title = "Internal Server Error", detail = "Unexpected error occurred." } } });
-            }
-        }
-
-        // POST: api/forms/{formId}/records
-        [HttpPost]
-        public async Task<ActionResult> CreateFormRecord(Guid formId, FormRecord formRecord)
-        {
-            if (formRecord == null)
-            {
-                return BadRequest(new { errors = new[] { new { status = "400", title = "Bad Request", detail = "Form record is null" } } });
-            }
-
-            try
-            {
-                formRecord.Id = Guid.NewGuid();
-                formRecord.FormId = formId;
-                _context.formrecords.Add(formRecord);
-                await _context.SaveChangesAsync();
-
-                var response = new
-                {
-                    type = "formRecord",
-                    id = formRecord.Id,
-                    firstName = formRecord.FirstName,
-                    secondName = formRecord.SecondName,
-                    lastName = formRecord.LastName,
-                    birthdate = formRecord.Birthdate,
-                    gender = formRecord.Gender,
-                    languageCode = formRecord.LanguageCode,
-                    nationality = formRecord.Nationality,
-                    phoneNumber = formRecord.PhoneNumber,
-                    email = formRecord.Email,
-                    arrival = formRecord.Arrival,
-                    departure = formRecord.Departure,
-                    address = formRecord.Address,
-                    zip = formRecord.Zip,
-                    city = formRecord.City,
-                    country = formRecord.Country,
-                    rating = formRecord.Rating,
-                    formId = formRecord.FormId
-                };
-
-                return CreatedAtAction(nameof(GetFormRecordById), new { formId = formId, recordId = formRecord.Id }, response);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error creating form record: {ex.Message}");
-                return StatusCode(StatusCodes.Status500InternalServerError, new { errors = new[] { new { status = "500", title = "Internal Server Error", detail = "Unexpected error occurred." } } });
-            }
-        }
-
-        // GET: api/forms/{formId}/records/{recordId}
-        [HttpGet("{recordId}")]
-        public async Task<ActionResult> GetFormRecordById(Guid formId, Guid recordId)
-        {
-            try
-            {
-                var formRecord = await _context.formrecords
-                    .FirstOrDefaultAsync(fr => fr.FormId == formId && fr.Id == recordId);
-
-                if (formRecord == null)
-                {
-                    return NotFound(new { errors = new[] { new { status = "404", title = "Not Found", detail = "Form record not found." } } });
-                }
-
-                var response = new
-                {
-                    type = "formRecord",
-                    id = formRecord.Id,
-                    firstName = formRecord.FirstName,
-                    secondName = formRecord.SecondName,
-                    lastName = formRecord.LastName,
-                    birthdate = formRecord.Birthdate,
-                    gender = formRecord.Gender,
-                    languageCode = formRecord.LanguageCode,
-                    nationality = formRecord.Nationality,
-                    phoneNumber = formRecord.PhoneNumber,
-                    email = formRecord.Email,
-                    arrival = formRecord.Arrival,
-                    departure = formRecord.Departure,
-                    address = formRecord.Address,
-                    zip = formRecord.Zip,
-                    city = formRecord.City,
-                    country = formRecord.Country,
-                    rating = formRecord.Rating,
-                    formId = formRecord.FormId
-                };
-
-                //return Ok(response);
-                return Content(JsonConvert.SerializeObject(response), "application/vnd.api+json");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error fetching form record: {ex.Message}");
-                return StatusCode(StatusCodes.Status500InternalServerError, new { errors = new[] { new { status = "500", title = "Internal Server Error", detail = "Unexpected error occurred." } } });
-            }
-        }
-
-        // PUT: api/forms/{formId}/records/{recordId}
-        [HttpPut("{recordId}")]
-        public async Task<ActionResult> UpdateFormRecord(Guid formId, Guid recordId, FormRecord formRecord)
-        {
-            if (formRecord == null)
-            {
-                return BadRequest(new { errors = new[] { new { status = "400", title = "Bad Request", detail = "Form record is null" } } });
-            }
-
-            try
-            {
-                var existingFormRecord = await _context.formrecords
-                    .FirstOrDefaultAsync(fr => fr.FormId == formId && fr.Id == recordId);
-
-                if (existingFormRecord == null)
-                {
-                    return NotFound(new { errors = new[] { new { status = "404", title = "Not Found", detail = "Form record not found." } } });
-                }
-
-                existingFormRecord.FirstName = formRecord.FirstName;
-                existingFormRecord.SecondName = formRecord.SecondName;
-                existingFormRecord.LastName = formRecord.LastName;
-                existingFormRecord.Birthdate = formRecord.Birthdate;
-                existingFormRecord.Gender = formRecord.Gender;
-                existingFormRecord.LanguageCode = formRecord.LanguageCode;
-                existingFormRecord.Nationality = formRecord.Nationality;
-                existingFormRecord.PhoneNumber = formRecord.PhoneNumber;
-                existingFormRecord.Email = formRecord.Email;
-                existingFormRecord.Arrival = formRecord.Arrival;
-                existingFormRecord.Departure = formRecord.Departure;
-                existingFormRecord.Address = formRecord.Address;
-                existingFormRecord.Zip = formRecord.Zip;
-                existingFormRecord.City = formRecord.City;
-                existingFormRecord.Country = formRecord.Country;
-                existingFormRecord.Rating = formRecord.Rating;
-
-                _context.formrecords.Update(existingFormRecord);
-                await _context.SaveChangesAsync();
-
-                var response = new
-                {
-                    type = "formRecord",
-                    id = existingFormRecord.Id,
-                    firstName = existingFormRecord.FirstName,
-                    secondName = existingFormRecord.SecondName,
-                    lastName = existingFormRecord.LastName,
-                    birthdate = existingFormRecord.Birthdate,
-                    gender = existingFormRecord.Gender,
-                    languageCode = existingFormRecord.LanguageCode,
-                    nationality = existingFormRecord.Nationality,
-                    phoneNumber = existingFormRecord.PhoneNumber,
-                    email = existingFormRecord.Email,
-                    arrival = existingFormRecord.Arrival,
-                    departure = existingFormRecord.Departure,
-                    address = existingFormRecord.Address,
-                    zip = existingFormRecord.Zip,
-                    city = existingFormRecord.City,
-                    country = existingFormRecord.Country,
-                    rating = existingFormRecord.Rating,
-                    formId = existingFormRecord.FormId
-                };
-
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error updating form record: {ex.Message}");
-                return StatusCode(StatusCodes.Status500InternalServerError, new { errors = new[] { new { status = "500", title = "Internal Server Error", detail = "Unexpected error occurred." } } });
-            }
-        }
-
-        // DELETE: api/forms/{formId}/records/{recordId}
-        [HttpDelete("{recordId}")]
-        public async Task<ActionResult> DeleteFormRecord(Guid formId, Guid recordId)
-        {
-            try
-            {
-                var formRecord = await _context.formrecords
-                    .FirstOrDefaultAsync(fr => fr.FormId == formId && fr.Id == recordId);
-
-                if (formRecord == null)
-                {
-                    return NotFound(new { errors = new[] { new { status = "404", title = "Not Found", detail = "Form record not found." } } });
-                }
-
-                _context.formrecords.Remove(formRecord);
-                await _context.SaveChangesAsync();
-
-                return NoContent();
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error deleting form record: {ex.Message}");
-                return StatusCode(StatusCodes.Status500InternalServerError, new { errors = new[] { new { status = "500", title = "Internal Server Error", detail = "Unexpected error occurred." } } });
-            }
-        }
-    }
-}
-*/
-
-
-
-
-
-
-
-
-
-
-
-
-
-/*
-using FormAPI.Context;
-using FormAPI.Models;
-using Microsoft.AspNetCore.Mvc;
-using AutoMapper;
-using Microsoft.EntityFrameworkCore;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using System.Linq;
-using System;
-
-namespace FormAPI.Controllers
-{
-    [Route("api/[controller]")]
-    [ApiController]
-    public class FormRecordsController : ControllerBase
-    {
-        private readonly ApplicationDbContext _context;
-        private readonly IMapper _mapper;
-
-        public FormRecordsController(ApplicationDbContext context, IMapper mapper)
-        {
-            _context = context;
-            _mapper = mapper;
-        }
-
-        [HttpPost]
-        public async Task<ActionResult<FormRecord>> CreateFormRecord(FormRecord formRecord)
-        {
-            if (formRecord == null)
-            {
-                return BadRequest(new { errors = new[] { new { status = "400", title = "Bad Request", detail = "Form record is null" } } });
-            }
-
-            try
-            {
-                formRecord.Id = Guid.NewGuid();
-                _context.formrecords.Add(formRecord);
-                await _context.SaveChangesAsync();
-
-                return CreatedAtAction(nameof(GetFormRecordById), new { id = formRecord.Id }, formRecord);
-            }
-            catch (Exception ex)
-            {
-                // Log the exception for debugging (optional)
-                Console.WriteLine($"Error creating form record: {ex.Message}");
-
-                return StatusCode(StatusCodes.Status500InternalServerError, new { errors = new[] { new { status = "500", title = "Internal Server Error", detail = "Unexpected error occurred." } } });
-            }
-        }
-
-        [HttpGet]
-        public async Task<ActionResult<IEnumerable<FormRecord>>> GetFormRecords()
-        {
-            var formRecords = await _context.formrecords.ToListAsync();
-            return Ok(formRecords);
-        }
-
-        [HttpGet("{id}")]
-        public async Task<ActionResult<FormRecord>> GetFormRecordById(Guid id)
-        {
-            var formRecord = await _context.formrecords.FindAsync(id);
-            if (formRecord == null)
-            {
-                return NotFound(new { errors = new[] { new { status = "404", title = "Not Found", detail = "Form record not found." } } });
-            }
-
-            return Ok(formRecord);
-        }
-
-        [HttpPut("{id}")]
-        public async Task<ActionResult<FormRecord>> UpdateFormRecord(Guid id, FormRecord formRecord)
-        {
-            if (formRecord == null)
-            {
-                return BadRequest(new { errors = new[] { new { status = "400", title = "Bad Request", detail = "Form record is null" } } });
-            }
-
-            var existingFormRecord = await _context.formrecords.FindAsync(id);
-            if (existingFormRecord == null)
-            {
-                return NotFound(new { errors = new[] { new { status = "404", title = "Not Found", detail = "Form record not found." } } });
-            }
-
-            try
-            {
-                _mapper.Map(formRecord, existingFormRecord);
-                _context.formrecords.Update(existingFormRecord);
-                await _context.SaveChangesAsync();
-
-                return Ok(existingFormRecord);
-            }
-            catch (Exception ex)
-            {
-                // Log the exception for debugging (optional)
-                Console.WriteLine($"Error updating form record: {ex.Message}");
-
-                return StatusCode(StatusCodes.Status500InternalServerError, new { errors = new[] { new { status = "500", title = "Internal Server Error", detail = "Unexpected error occurred." } } });
-            }
-        }
-
-        [HttpDelete("{id}")]
-        public async Task<ActionResult> DeleteFormRecord(Guid id)
-        {
-            var formRecord = await _context.formrecords.FindAsync(id);
-            if (formRecord == null)
-            {
-                return NotFound(new { errors = new[] { new { status = "404", title = "Not Found", detail = "Form record not found." } } });
-            }
-
-            try
-            {
-                _context.formrecords.Remove(formRecord);
-                await _context.SaveChangesAsync();
-                return NoContent();
-            }
-            catch (Exception ex)
-            {
-                // Log the exception for debugging (optional)
-                Console.WriteLine($"Error deleting form record: {ex.Message}");
-
-                return StatusCode(StatusCodes.Status500InternalServerError, new { errors = new[] { new { status = "500", title = "Internal Server Error", detail = "Unexpected error occurred." } } });
-            }
-        }
-
-        [HttpGet("form/{formId}")]
-        public async Task<ActionResult<IEnumerable<FormRecord>>> GetFormRecordsByFormId(Guid formId)
-        {
-            var formRecords = await _context.formrecords.Where(fr => fr.FormId == formId).ToListAsync();
-            return Ok(formRecords);
-        }
-
-        [HttpGet("form/{formId}/{id}")]
-        public async Task<ActionResult<FormRecord>> GetFormRecordByFormIdAndId(Guid formId, Guid id)
-        {
-            var formRecord = await _context.formrecords.FirstOrDefaultAsync(fr => fr.FormId == formId && fr.Id == id);
-            if (formRecord == null)
-            {
-                return NotFound(new { errors = new[] { new { status = "404", title = "Not Found", detail = "Form record not found." } } });
-            }
-
-            return Ok(formRecord);
-        }
-
-        [HttpPost("form/{formId}")]
-        public async Task<ActionResult<FormRecord>> CreateFormRecordForForm(Guid formId, FormRecord formRecord)
-        {
-            if (formRecord == null)
-            {
-                return BadRequest(new { errors = new[] { new { status = "400", title = "Bad Request", detail = "Form record is null" } } });
-            }
-
-            var form = await _context.forms.FindAsync(formId);
-            if (form == null)
-            {
-                return NotFound(new { errors = new[] { new { status = "404", title = "Not Found", detail = "Form not found." } } });
-            }
-
-            try
-            {
-                formRecord.Id = Guid.NewGuid();
-                formRecord.FormId = formId;
-
-                _context.formrecords.Add(formRecord);
-                await _context.SaveChangesAsync();
-
-                return CreatedAtAction(nameof(GetFormRecordByFormIdAndId), new { formId, id = formRecord.Id }, formRecord);
-            }
-            catch (Exception ex)
-            {
-                // Log the exception for debugging (optional)
-                Console.WriteLine($"Error creating form record: {ex.Message}");
-
-                return StatusCode(StatusCodes.Status500InternalServerError, new { errors = new[] { new { status = "500", title = "Internal Server Error", detail = "Unexpected error occurred." } } });
-            }
-        }
-
-        [HttpPut("form/{formId}/{id}")]
-        public async Task<ActionResult<FormRecord>> UpdateFormRecordForForm(Guid formId, Guid id, FormRecord formRecord)
-        {
-            if (formRecord == null)
-            {
-                return BadRequest(new { errors = new[] { new { status = "400", title = "Bad Request", detail = "Form record is null" } } });
-            }
-
-            var existingFormRecord = await _context.formrecords.FirstOrDefaultAsync(fr => fr.FormId == formId && fr.Id == id);
-            if (existingFormRecord == null)
-            {
-                return NotFound(new { errors = new[] { new { status = "404", title = "Not Found", detail = "Form record not found." } } });
-            }
-
-            try
-            {
-                _mapper.Map(formRecord, existingFormRecord);
-                _context.formrecords.Update(existingFormRecord);
-                await _context.SaveChangesAsync();
-
-                return Ok(existingFormRecord);
-            }
-            catch (Exception ex)
-            {
-                // Log the exception for debugging (optional)
-                Console.WriteLine($"Error updating form record: {ex.Message}");
-
-                return StatusCode(StatusCodes.Status500InternalServerError, new { errors = new[] { new { status = "500", title = "Internal Server Error", detail = "Unexpected error occurred." } } });
-            }
-        }
-
-        [HttpDelete("form/{formId}/{id}")]
-        public async Task<ActionResult> DeleteFormRecordForForm(Guid formId, Guid id)
-        {
-            var formRecord = await _context.formrecords.FirstOrDefaultAsync(fr => fr.FormId == formId && fr.Id == id);
-            if (formRecord == null)
-            {
-                return NotFound(new { errors = new[] { new { status = "404", title = "Not Found", detail = "Form record not found." } } });
-            }
-
-            try
-            {
-                _context.formrecords.Remove(formRecord);
-                await _context.SaveChangesAsync();
-                return NoContent();
-            }
-            catch (Exception ex)
-            {
-                // Log the exception for debugging (optional)
-                Console.WriteLine($"Error deleting form record: {ex.Message}");
-
-                return StatusCode(StatusCodes.Status500InternalServerError, new { errors = new[] { new { status = "500", title = "Internal Server Error", detail = "Unexpected error occurred." } } });
-            }
-        }
-    }
-}
-
-
-*/
-
-
-
-
-
-
-
-/*
-using FormAPI.Context;
-using FormAPI.DTOs;
-using FormAPI.Models;
-using Microsoft.AspNetCore.Mvc;
-using AutoMapper;
-using Microsoft.EntityFrameworkCore;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using System.Linq;
-using System;
-
-namespace FormAPI.Controllers
-{
-    [Route("api/[controller]")]
-    [ApiController]
-    public class FormRecordsController : ControllerBase
-    {
-        private readonly ApplicationDbContext _context;
-        private readonly IMapper _mapper;
-
-        public FormRecordsController(ApplicationDbContext context, IMapper mapper)
-        {
-            _context = context;
-            _mapper = mapper;
-        }
-
-        [HttpPost]
-        public async Task<ActionResult<FormRecordDto>> CreateFormRecord(FormRecordDto formRecordDto)
-        {
-            if (formRecordDto == null)
-            {
-                return BadRequest(new { errors = new[] { new { status = "400", title = "Bad Request", detail = "Form record DTO is null" } } });
-            }
-
-            try
-            {
-                var formRecord = _mapper.Map<FormRecord>(formRecordDto);
-                _context.formrecords.Add(formRecord);
-                await _context.SaveChangesAsync();
-
-                var createdFormRecordDto = _mapper.Map<FormRecordDto>(formRecord);
-                return CreatedAtAction(nameof(GetFormRecordById), new { id = formRecord.Id }, createdFormRecordDto);
-            }
-            catch (Exception ex)
-            {
-                // Log the exception for debugging (optional)
-                Console.WriteLine($"Error creating form record: {ex.Message}");
-
-                return StatusCode(StatusCodes.Status500InternalServerError, new { errors = new[] { new { status = "500", title = "Internal Server Error", detail = "Unexpected error occurred." } } });
-            }
-        }
-
-        [HttpGet]
-        public async Task<ActionResult<IEnumerable<FormRecordDto>>> GetFormRecords()
-        {
-            var formRecords = await _context.formrecords.ToListAsync();
-            var formRecordDtos = _mapper.Map<List<FormRecordDto>>(formRecords);
-
-            return Ok(formRecordDtos);
-        }
-
-        [HttpGet("{id}")]
-        public async Task<ActionResult<FormRecordDto>> GetFormRecordById(int id)
-        {
-            var formRecord = await _context.formrecords.FindAsync(id);
-            if (formRecord == null)
-            {
-                return NotFound(new { errors = new[] { new { status = "404", title = "Not Found", detail = "Form record not found." } } });
-            }
-
-            var formRecordDto = _mapper.Map<FormRecordDto>(formRecord);
-            return Ok(formRecordDto);
-        }
-
-        [HttpPut("{id}")]
-        public async Task<ActionResult<FormRecordDto>> UpdateFormRecord(int id, FormRecordDto formRecordDto)
-        {
-            if (formRecordDto == null)
-            {
-                return BadRequest(new { errors = new[] { new { status = "400", title = "Bad Request", detail = "Form record DTO is null" } } });
-            }
-
-            var formRecord = await _context.formrecords.FindAsync(id);
-            if (formRecord == null)
-            {
-                return NotFound(new { errors = new[] { new { status = "404", title = "Not Found", detail = "Form record not found." } } });
-            }
-
-            try
-            {
-                _mapper.Map(formRecordDto, formRecord);
-                _context.formrecords.Update(formRecord);
-                await _context.SaveChangesAsync();
-
-                var updatedFormRecordDto = _mapper.Map<FormRecordDto>(formRecord);
-                return Ok(updatedFormRecordDto);
-            }
-            catch (Exception ex)
-            {
-                // Log the exception for debugging (optional)
-                Console.WriteLine($"Error updating form record: {ex.Message}");
-
-                return StatusCode(StatusCodes.Status500InternalServerError, new { errors = new[] { new { status = "500", title = "Internal Server Error", detail = "Unexpected error occurred." } } });
-            }
-        }
-
-        [HttpDelete("{id}")]
-        public async Task<ActionResult> DeleteFormRecord(int id)
-        {
-            var formRecord = await _context.formrecords.FindAsync(id);
-            if (formRecord == null)
-            {
-                return NotFound(new { errors = new[] { new { status = "404", title = "Not Found", detail = "Form record not found." } } });
-            }
-
-            try
-            {
-                _context.formrecords.Remove(formRecord);
-                await _context.SaveChangesAsync();
-                return NoContent();
-            }
-            catch (Exception ex)
-            {
-                // Log the exception for debugging (optional)
-                Console.WriteLine($"Error deleting form record: {ex.Message}");
-
-                return StatusCode(StatusCodes.Status500InternalServerError, new { errors = new[] { new { status = "500", title = "Internal Server Error", detail = "Unexpected error occurred." } } });
-            }
-        }
-
-        [HttpGet("form/{formId}")]
-        public async Task<ActionResult<IEnumerable<FormRecordDto>>> GetFormRecordsByFormId(int formId)
-        {
-            var formRecords = await _context.formrecords.Where(fr => fr.FormId == formId).ToListAsync();
-            var formRecordDtos = _mapper.Map<List<FormRecordDto>>(formRecords);
-
-            return Ok(formRecordDtos);
-        }
-
-        [HttpGet("form/{formId}/{id}")]
-        public async Task<ActionResult<FormRecordDto>> GetFormRecordByFormIdAndId(int formId, int id)
-        {
-            var formRecord = await _context.formrecords.FirstOrDefaultAsync(fr => fr.FormId == formId && fr.Id == id);
-            if (formRecord == null)
-            {
-                return NotFound(new { errors = new[] { new { status = "404", title = "Not Found", detail = "Form record not found." } } });
-            }
-
-            var formRecordDto = _mapper.Map<FormRecordDto>(formRecord);
-            return Ok(formRecordDto);
-        }
-
-        [HttpPost("form/{formId}")]
-        public async Task<ActionResult<FormRecordDto>> CreateFormRecordForForm(int formId, FormRecordDto formRecordDto)
-        {
-            if (formRecordDto == null)
-            {
-                return BadRequest(new { errors = new[] { new { status = "400", title = "Bad Request", detail = "Form record DTO is null" } } });
-            }
-
-            var form = await _context.forms.FindAsync(formId);
-            if (form == null)
-            {
-                return NotFound(new { errors = new[] { new { status = "404", title = "Not Found", detail = "Form not found." } } });
-            }
-
-            try
-            {
-                var formRecord = _mapper.Map<FormRecord>(formRecordDto);
-                formRecord.FormId = formId;
-
-                _context.formrecords.Add(formRecord);
-                await _context.SaveChangesAsync();
-
-                var createdFormRecordDto = _mapper.Map<FormRecordDto>(formRecord);
-                return CreatedAtAction(nameof(GetFormRecordByFormIdAndId), new { formId, id = formRecord.Id }, createdFormRecordDto);
-            }
-            catch (Exception ex)
-            {
-                // Log the exception for debugging (optional)
-                Console.WriteLine($"Error creating form record: {ex.Message}");
-
-                return StatusCode(StatusCodes.Status500InternalServerError, new { errors = new[] { new { status = "500", title = "Internal Server Error", detail = "Unexpected error occurred." } } });
-            }
-        }
-
-        [HttpPut("form/{formId}/{id}")]
-        public async Task<ActionResult<FormRecordDto>> UpdateFormRecordForForm(int formId, int id, FormRecordDto formRecordDto)
-        {
-            if (formRecordDto == null)
-            {
-                return BadRequest(new { errors = new[] { new { status = "400", title = "Bad Request", detail = "Form record DTO is null" } } });
-            }
-
-            var formRecord = await _context.formrecords.FirstOrDefaultAsync(fr => fr.FormId == formId && fr.Id == id);
-            if (formRecord == null)
-            {
-                return NotFound(new { errors = new[] { new { status = "404", title = "Not Found", detail = "Form record not found." } } });
-            }
-
-            try
-            {
-                _mapper.Map(formRecordDto, formRecord);
-                _context.formrecords.Update(formRecord);
-                await _context.SaveChangesAsync();
-
-                var updatedFormRecordDto = _mapper.Map<FormRecordDto>(formRecord);
-                return Ok(updatedFormRecordDto);
-            }
-            catch (Exception ex)
-            {
-                // Log the exception for debugging (optional)
-                Console.WriteLine($"Error updating form record: {ex.Message}");
-
-                return StatusCode(StatusCodes.Status500InternalServerError, new { errors = new[] { new { status = "500", title = "Internal Server Error", detail = "Unexpected error occurred." } } });
-            }
-        }
-
-        [HttpDelete("form/{formId}/{id}")]
-        public async Task<ActionResult> DeleteFormRecordForForm(int formId, int id)
-        {
-            var formRecord = await _context.formrecords.FirstOrDefaultAsync(fr => fr.FormId == formId && fr.Id == id);
-            if (formRecord == null)
-            {
-                return NotFound(new { errors = new[] { new { status = "404", title = "Not Found", detail = "Form record not found." } } });
-            }
-
-            try
-            {
-                _context.formrecords.Remove(formRecord);
-                await _context.SaveChangesAsync();
-                return NoContent();
-            }
-            catch (Exception ex)
-            {
-                // Log the exception for debugging (optional)
-                Console.WriteLine($"Error deleting form record: {ex.Message}");
-
-                return StatusCode(StatusCodes.Status500InternalServerError, new { errors = new[] { new { status = "500", title = "Internal Server Error", detail = "Unexpected error occurred." } } });
-            }
-        }
-    }
-}
-*/
-
-
-
-
-
-/*
-using FormAPI.Context;
-using FormAPI.DTOs;
-using FormAPI.Models;
-using Microsoft.AspNetCore.Mvc;
-using AutoMapper;
-using Microsoft.EntityFrameworkCore;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using System.Linq;
-
-namespace FormAPI.Controllers
-{
-    [Route("api/[controller]")]
-    [ApiController]
-    public class FormRecordsController : ControllerBase
-    {
-        private readonly ApplicationDbContext _context;
-        private readonly IMapper _mapper;
-
-        public FormRecordsController(ApplicationDbContext context, IMapper mapper)
-        {
-            _context = context;
-            _mapper = mapper;
-        }
-
-        [HttpPost]
-        public async Task<ActionResult<FormRecordDto>> CreateFormRecord(FormRecordDto formRecordDto)
-        {
-            if (formRecordDto == null)
-            {
-                return BadRequest("Form record DTO is null");
-            }
-            
-            var formRecord = _mapper.Map<FormRecord>(formRecordDto);
-            _context.formrecords.Add(formRecord);
-            await _context.SaveChangesAsync();
-
-            var createdFormRecordDto = _mapper.Map<FormRecordDto>(formRecord);
-            return CreatedAtAction(nameof(GetFormRecordById), new { id = formRecord.Id }, createdFormRecordDto);
-        }
-
-        [HttpGet]
-        public async Task<ActionResult<IEnumerable<FormRecordDto>>> GetFormRecords()
-        {
-            var formRecords = await _context.formrecords.ToListAsync();
-            var formRecordDtos = _mapper.Map<List<FormRecordDto>>(formRecords);
-
-            return Ok(formRecordDtos);
-        }
-
-        [HttpGet("{id}")]
-        public async Task<ActionResult<FormRecordDto>> GetFormRecordById(int id)
-        {
-            var formRecord = await _context.formrecords.FindAsync(id);
-            if (formRecord == null)
-            {
-                return NotFound("Form record not found.");
-            }
-
-            var formRecordDto = _mapper.Map<FormRecordDto>(formRecord);
-            return Ok(formRecordDto);
-        }
-
-        [HttpPut("{id}")]
-        public async Task<ActionResult<FormRecordDto>> UpdateFormRecord(int id, FormRecordDto formRecordDto)
-        {
-            if (formRecordDto == null)
-            {
-                return BadRequest("Form record DTO is null");
-            }
-
-            var formRecord = await _context.formrecords.FindAsync(id);
-            if (formRecord == null)
-            {
-                return NotFound("Form record not found.");
-            }
-
-            _mapper.Map(formRecordDto, formRecord);
-            _context.formrecords.Update(formRecord);
-            await _context.SaveChangesAsync();
-
-            var updatedFormRecordDto = _mapper.Map<FormRecordDto>(formRecord);
-            return Ok(updatedFormRecordDto);
-        }
-
-        [HttpDelete("{id}")]
-        public async Task<ActionResult> DeleteFormRecord(int id)
-        {
-            var formRecord = await _context.formrecords.FindAsync(id);
-            if (formRecord == null)
-            {
-                return NotFound("Form record not found.");
-            }
-
-            _context.formrecords.Remove(formRecord);
-            await _context.SaveChangesAsync();
-
-            return NoContent();
-        }
-
-        [HttpGet("form/{formId}")]
-        public async Task<ActionResult<IEnumerable<FormRecordDto>>> GetFormRecordsByFormId(int formId)
-        {
-            var formRecords = await _context.formrecords.Where(fr => fr.FormId == formId).ToListAsync();
-            var formRecordDtos = _mapper.Map<List<FormRecordDto>>(formRecords);
-
-            return Ok(formRecordDtos);
-        }
-
-        [HttpGet("form/{formId}/{id}")]
-        public async Task<ActionResult<FormRecordDto>> GetFormRecordByFormIdAndId(int formId, int id)
-        {
-            var formRecord = await _context.formrecords.FirstOrDefaultAsync(fr => fr.FormId == formId && fr.Id == id);
-            if (formRecord == null)
-            {
-                return NotFound("Form record not found.");
-            }
-
-            var formRecordDto = _mapper.Map<FormRecordDto>(formRecord);
-            return Ok(formRecordDto);
-        }
-
-        [HttpPost("form/{formId}")]
-        public async Task<ActionResult<FormRecordDto>> CreateFormRecordForForm(int formId, FormRecordDto formRecordDto)
-        {
-            if (formRecordDto == null)
-            {
-                return BadRequest("Form record DTO is null");
-            }
-
-            var form = await _context.forms.FindAsync(formId);
-            if (form == null)
-            {
-                return NotFound("Form not found.");
-            }
-
-            var formRecord = _mapper.Map<FormRecord>(formRecordDto);
-            formRecord.FormId = formId;
-
-            _context.formrecords.Add(formRecord);
-            await _context.SaveChangesAsync();
-
-            var createdFormRecordDto = _mapper.Map<FormRecordDto>(formRecord);
-            return CreatedAtAction(nameof(GetFormRecordByFormIdAndId), new { formId, id = formRecord.Id }, createdFormRecordDto);
-        }
-
-        [HttpPut("form/{formId}/{id}")]
-        public async Task<ActionResult<FormRecordDto>> UpdateFormRecordForForm(int formId, int id, FormRecordDto formRecordDto)
-        {
-            if (formRecordDto == null)
-            {
-                return BadRequest("Form record DTO is null");
-            }
-
-            var formRecord = await _context.formrecords.FirstOrDefaultAsync(fr => fr.FormId == formId && fr.Id == id);
-            if (formRecord == null)
-            {
-                return NotFound("Form record not found.");
-            }
-
-            _mapper.Map(formRecordDto, formRecord);
-            _context.formrecords.Update(formRecord);
-            await _context.SaveChangesAsync();
-
-            var updatedFormRecordDto = _mapper.Map<FormRecordDto>(formRecord);
-            return Ok(updatedFormRecordDto);
-        }
-
-        [HttpDelete("form/{formId}/{id}")]
-        public async Task<ActionResult> DeleteFormRecordForForm(int formId, int id)
-        {
-            var formRecord = await _context.formrecords.FirstOrDefaultAsync(fr => fr.FormId == formId && fr.Id == id);
-            if (formRecord == null)
-            {
-                return NotFound("Form record not found.");
-            }
-
-            _context.formrecords.Remove(formRecord);
-            await _context.SaveChangesAsync();
-
-            return NoContent();
-        }
-    }
-}
-*/

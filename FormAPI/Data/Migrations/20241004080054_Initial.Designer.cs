@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using FormAPI.Context;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace FormAPI.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20241004080054_Initial")]
+    partial class Initial
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -31,13 +34,11 @@ namespace FormAPI.Data.Migrations
 
                     b.Property<string>("Description")
                         .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("text");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
+                        .HasColumnType("text");
 
                     b.HasKey("Id");
 
@@ -46,9 +47,9 @@ namespace FormAPI.Data.Migrations
                     b.HasData(
                         new
                         {
-                            Id = new Guid("ec0468f6-8a0c-46ea-94b8-3f547074c42c"),
+                            Id = new Guid("e1b2ab67-45d2-456b-ac48-c2b59f1e84ba"),
                             Description = "A form to collect customer feedback.",
-                            Name = "JKUSA"
+                            Name = "Customer Feedback Form"
                         });
                 });
 
@@ -58,7 +59,7 @@ namespace FormAPI.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<Dictionary<string, object>>("Attributes")
+                    b.Property<string>("Attributes")
                         .IsRequired()
                         .HasColumnType("jsonb");
 
@@ -83,7 +84,7 @@ namespace FormAPI.Data.Migrations
                     b.Property<bool>("Required")
                         .HasColumnType("boolean");
 
-                    b.Property<Dictionary<string, object>>("Rules")
+                    b.Property<string>("Rules")
                         .IsRequired()
                         .HasColumnType("jsonb");
 
@@ -96,15 +97,15 @@ namespace FormAPI.Data.Migrations
                     b.HasData(
                         new
                         {
-                            InternalId = new Guid("93d20524-4b26-4de0-a509-2b104bcc4970"),
-                            Attributes = new Dictionary<string, object>(),
-                            FieldType = "FirstName",
+                            InternalId = new Guid("ce8b08ce-8972-4ad8-8e87-a6861d099092"),
+                            Attributes = "{\"maxLength\":100}",
+                            FieldType = "profileId",
                             Id = "profileFirstName",
                             Kind = "profile",
                             Name = "profileFirstName",
-                            PageId = new Guid("dd2b6d09-5dfb-4b7b-8803-0f2248e0bd2d"),
+                            PageId = new Guid("34a0d875-1e9e-4c30-afd5-383ce6257937"),
                             Required = true,
-                            Rules = new Dictionary<string, object>()
+                            Rules = "{\"minLength\":2,\"pattern\":\"^[a-zA-Z ]*$\"}"
                         });
                 });
 
@@ -117,7 +118,7 @@ namespace FormAPI.Data.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<string>("FormFieldValues")
+                    b.Property<Dictionary<string, object>>("FormFieldValues")
                         .IsRequired()
                         .HasColumnType("jsonb");
 
@@ -133,10 +134,10 @@ namespace FormAPI.Data.Migrations
                     b.HasData(
                         new
                         {
-                            Id = new Guid("1cb4833d-41ee-4fe7-b077-6e1982c41202"),
-                            CreatedAt = new DateTime(2024, 10, 10, 10, 16, 54, 82, DateTimeKind.Utc).AddTicks(9915),
-                            FormFieldValues = "{\"profileFirstName\":\"Nelly\"}",
-                            FormId = new Guid("ec0468f6-8a0c-46ea-94b8-3f547074c42c")
+                            Id = new Guid("c3be4411-32a1-4091-b882-ed0562943679"),
+                            CreatedAt = new DateTime(2024, 10, 4, 8, 0, 53, 577, DateTimeKind.Utc).AddTicks(2804),
+                            FormFieldValues = new Dictionary<string, object> { ["profileFirstName"] = "Nelly" },
+                            FormId = new Guid("e1b2ab67-45d2-456b-ac48-c2b59f1e84ba")
                         });
                 });
 
@@ -158,8 +159,8 @@ namespace FormAPI.Data.Migrations
                     b.HasData(
                         new
                         {
-                            Id = new Guid("dd2b6d09-5dfb-4b7b-8803-0f2248e0bd2d"),
-                            FormId = new Guid("ec0468f6-8a0c-46ea-94b8-3f547074c42c")
+                            Id = new Guid("34a0d875-1e9e-4c30-afd5-383ce6257937"),
+                            FormId = new Guid("e1b2ab67-45d2-456b-ac48-c2b59f1e84ba")
                         });
                 });
 
