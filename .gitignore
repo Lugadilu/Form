@@ -4,7 +4,3 @@ obj/
 
 # Ignore appsettings file
 appsettings.json
-
-# ignore .vs which contains filees related to visual studio
-.vs/
-
